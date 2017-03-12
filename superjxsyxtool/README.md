@@ -3,11 +3,7 @@
 ## What This Program Does
 This C++ command-line program manipulates system exclusive dumps from
 MKS-70 and JX-10 synthesizers with ROM versions 1.08 through Vecoven 3.x.
-HTML Program List output from the Nord Sound Manager program.
-The reference card is a grid based on page and program. 
-For keyboards with more than one bank of sounds, a separate grid is produced for each bank. 
-It works for the Electro 4, Stage 2, and Lead A1 keyboards, at least.
-This has been tested with the output of Nord Sound Manager 6.86 build 734_12 [OSX Intel].
+I guess it's kind of a tough love librarian for the Super JX.
 
 ## Why This Script
 I wanted to rearrange patches in my MKS-70 and select patches and tones from various bulk dump
@@ -54,7 +50,7 @@ optional arguments:
 ## Examples
 To print all patches and tones including factory preset tones from the bulk dump file dump.syx:
 ```
-superjxsyxtool -p -f dump.syx
+superjxsyxtool -p -v dump.syx
 ```
 
 To exchange patches A2 and B1, and A3 and C1, and tones 21 and 22,
@@ -64,3 +60,8 @@ and write the manipulated system exclusive dump to file newdump.syx:
 superjxsyxtool -x A2,B1,21,22,A3,C1 -o newdump.syx dump.syx
 ```
 
+To copy patches c3 and d6 and their corresponding tones from jxsounds1.syx
+to c1 and d1 in dump.syx and write the result to greatsounds.syx, and print the result:
+```
+superjxsyxtool -s jxsounds1.syx -c c3,c1,d6,d1 -o greatsounds.syx dump.syx
+```
