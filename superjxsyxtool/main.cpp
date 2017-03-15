@@ -67,7 +67,9 @@ namespace
         SyxBuffer::const_iterator patchStart = from;
         do
         {
-            if ((patchStart != syx.end())
+            // patchStart[2]
+            // 0x34 = PGR    0x35 = APR    0x36 = IPR    0x37 = BLD
+            if ((patchStart < syx.end())
                 && (patchStart+105 < syx.end())
                 && (patchStart[0] == 0xf0)
                 && (patchStart[1] == 0x41) // Roland
@@ -79,29 +81,33 @@ namespace
                 return true;
             }
         }
-        while (++patchStart != syx.end());
+        while (++patchStart < syx.end());
         return false;
     }
     
-    static bool FindTone(const SyxBuffer& syx, SyxBuffer::const_iterator& from)
+    static size_t FindTone(const SyxBuffer& syx, SyxBuffer::const_iterator& from)
     {
-        SyxBuffer::const_iterator toneStart = from;
+        SyxBuffer::const_iterator it = from;
         do
         {
-            if ((toneStart != syx.end())
-                && (toneStart+68 < syx.end())
-                && (toneStart[0] == 0xf0)
-                && (toneStart[1] == 0x41) // Roland
-                && (toneStart[4] == 0x24) // MKS-70 / JX-10
-                && (toneStart[5] == 0x20) // Tone Data
-                && (toneStart[68] == 0xf7)) // end of tone data (69 bytes in file)
+            // toneStart[2]
+            // 0x34 = PGR    0x35 = APR    0x36 = IPR    0x37 = BLD
+            if ((it < syx.end())
+                && (it[0] == 0xf0)
+                && (it[1] == 0x41) // Roland
+                && (it[4] == 0x24) // MKS-70 / JX-10
+                && (it[5] == 0x20)) // Tone Data
             {
-                from = toneStart;
-                return true;
+                from = it;
+                while ((*(++it) != 0xf7) && (it < syx.end())) ;
+                if (it < syx.end())
+                {
+                    return it-from+1;
+                }
             }
         }
-        while (++toneStart != syx.end());
-        return false;
+        while (++it < syx.end());
+        return 0;
     }
     
     Patches ParsePatches(const SyxBuffer& syx)
@@ -125,18 +131,18 @@ namespace
     Tones ParseTones(const SyxBuffer& syx)
     {
         Tones tones;
+        size_t toneSize = 0;
         SyxBuffer::const_iterator it = syx.begin();
-        for (int i=0; i<50; ++i)
+        do
         {
-            if (FindTone(syx,it))
+            toneSize = FindTone(syx,it);
+            if (toneSize>0)
             {
-                SyxBuffer tone(it,it+69);
-                it+=69;
+                SyxBuffer tone(it,it+toneSize);
+                it+=toneSize;
                 tones.push_back(tone);
             }
-            else
-                return Tones();
-        }
+        } while (toneSize != 0);
         return tones;
     }
     
@@ -208,7 +214,7 @@ namespace
     bool IsUserTone(const std::string& str)
     {
         unsigned char t = ParseToneNumber(str);
-        return t>0 && t<51;
+        return t>=0 && t<51;
     }
     
     static Swaps ParseSwaps(const char* swapstr)
@@ -333,7 +339,7 @@ namespace
         const PatchSwaps& patchSwaps = swaps.first;
         ToneSwaps toneSwaps = swaps.second; // this is a copy; it will be changed below
         
-        if (!srcPatches.empty() && !srcTones.empty())
+        //if (!srcPatches.empty() && !srcTones.empty())
         {
             // first identify which tones can be overwritten by counting tones used by current uncopied patches
             ToneNumberSet unusedTones = InvertToneNumberSet(ToneNumberSet());
@@ -469,9 +475,17 @@ namespace
         }
         for (Tones::iterator it=tones.begin(); it!=tones.end(); ++it)
         {
-            *(it->begin()+3) = (unsigned char)0; // set midi channel to 1
-            *(it->begin()+8) = t++; // important! renumber the output patches
-            syx.insert(syx.end(),it->begin(),it->end());
+            SyxBuffer tone(it->begin(),it->end());
+            if (tone.size() == 67)
+            {
+                // convert PGR, APR, IPR tones to BLD
+                tone.insert(tone.begin()+7,0);
+                tone.insert(tone.begin()+7,0);
+            }
+            tone[2] = 0x37; // BLD
+            tone[3] = 0; // set midi channel to 1
+            tone[8] = t++; // important! renumber the output patches
+            syx.insert(syx.end(),tone.begin(),tone.end());
         }
         return syx;
     }
@@ -504,30 +518,33 @@ namespace
         std::cerr << "-----------------------------------" << std::endl;
         std::cerr << "PATCH      NAME              A    B" << std::endl;
         std::cerr << "-----------------------------------" << std::endl;
-        for (int p=0; p<32; ++p)
+        for (int p=0; p<patches.size()/2; ++p)
         {
             PrintPatchName(patches[p],p);
             std::cerr << "          ";
-            PrintPatchName(patches[p+32],p+32);
+            PrintPatchName(patches[p+patches.size()/2],p+patches.size()/2);
             std::cerr << std::endl;
             if ((p+1)%8==0) std::cerr << std::endl;
         }
         std::cerr << "--------------" << std::endl;
         std::cerr << "T#   TONE NAME" << std::endl;
         std::cerr << "--------------" << std::endl;
-        size_t toneCount = tones.size();
-        for (int t=0; t<toneCount/5; ++t)
+        size_t rowCount = tones.size() == 1 ? 1 : tones.size()/5;
+        for (int t=0; t<rowCount; ++t)
         {
             PrintToneName(tones[t],t);
-            std::cerr << "     ";
-            PrintToneName(tones[t+toneCount/5],t+toneCount/5);
-            std::cerr << "     ";
-            PrintToneName(tones[t+toneCount/5*2],t+toneCount/5*2);
-            std::cerr << "     ";
-            PrintToneName(tones[t+toneCount/5*3],t+toneCount/5*3);
-            std::cerr << "     ";
-            PrintToneName(tones[t+toneCount/5*4],t+toneCount/5*4);
-            std::cerr << std::endl;
+            if (rowCount < tones.size())
+            {
+                std::cerr << "     ";
+                PrintToneName(tones[t+rowCount],t+rowCount);
+                std::cerr << "     ";
+                PrintToneName(tones[t+rowCount*2],t+rowCount*2);
+                std::cerr << "     ";
+                PrintToneName(tones[t+rowCount*3],t+rowCount*3);
+                std::cerr << "     ";
+                PrintToneName(tones[t+rowCount*4],t+rowCount*4);
+                std::cerr << std::endl;
+            }
         }
         if (printPresets)
         {
