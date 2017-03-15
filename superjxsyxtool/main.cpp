@@ -96,7 +96,8 @@ namespace
                 && (it[0] == 0xf0)
                 && (it[1] == 0x41) // Roland
                 && (it[4] == 0x24) // MKS-70 / JX-10
-                && (it[5] == 0x20)) // Tone Data
+                && (it[5] == 0x20) // Tone Data
+                && ((it[68] == 0xf7) || (it[66] == 0xf7))) // end of tone data
             {
                 from = it;
                 while ((*(++it) != 0xf7) && (it < syx.end())) ;
