@@ -340,7 +340,7 @@ namespace
         const PatchSwaps& patchSwaps = swaps.first;
         ToneSwaps toneSwaps = swaps.second; // this is a copy; it will be changed below
         
-        //if (!srcPatches.empty() && !srcTones.empty())
+        if (!patchSwaps.empty() || !toneSwaps.empty())
         {
             // first identify which tones can be overwritten by counting tones used by current uncopied patches
             ToneNumberSet unusedTones = InvertToneNumberSet(ToneNumberSet());
