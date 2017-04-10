@@ -16,7 +16,7 @@ to do this, but I can't get it to run any more.
 ## What You Need
 You need system exclusive from your MKS-70 or JX-10, either bulk dump or an individual patch dump.
 You can generate this yourself by recording the bulk dump, or use one of the many files found elsewhere online.
-To build this program, you need a C++ compiler. I am building on macOS with libc++.
+To build this program, you need a C++ compiler. Projects are supplied for Xcode and Visual Studio.
 
 ## Help
 Here is the output of `superjxsyxtool -h` :

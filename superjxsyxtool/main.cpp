@@ -18,11 +18,13 @@ namespace
     
     static const size_t kHeaderSize = 8;
     static const size_t kOffset_MIDIChannel = 3;
-    static const size_t kOffset_Number = kHeaderSize;
+    static const size_t kOffset_Address = 8;
     static const size_t kPatchOffset_Name = kHeaderSize + 1;
     static const size_t kPatchOffset_ToneA = kHeaderSize + 55;
     static const size_t kPatchOffset_ToneB = kHeaderSize + 65;
-    static const size_t kPatchSize = 106;
+	static const size_t kPatchSize = 106;
+	static const size_t kToneSize = 69;
+	static const size_t kToneSize_Short = 67;
     
     typedef std::vector<unsigned char> SyxBuffer;
     typedef std::vector<SyxBuffer> Patches;
@@ -116,7 +118,7 @@ namespace
                 && (it[1] == 0x41) // Roland
                 && (it[4] == 0x24) // MKS-70 / JX-10
                 && (it[5] == 0x20) // Tone Data
-                && ((it[68] == 0xf7) || (it[66] == 0xf7))) // end of tone data
+                && ((it[kToneSize-1] == 0xf7) || (it[kToneSize_Short-1] == 0xf7))) // end of tone data
             {
                 from = it;
                 while ((*(++it) != 0xf7) && (it < syx.end())) ;
@@ -162,7 +164,7 @@ namespace
                 it+=toneSize;
                 tones.push_back(tone);
             }
-        } while (toneSize != 0);
+        } while (toneSize!=0 && it<syx.end());
         return tones;
     }
     
@@ -331,14 +333,6 @@ namespace
         }
     }
     
-//    static PatchNumberSet InvertPatchNumberSet(const PatchNumberSet& patches)
-//    {
-//        PatchNumberSet ipatches;
-//        for (int i=0; i<patches.size(); ++i) ipatches.insert(i);
-//        for (PatchNumberSet::const_iterator it=patches.begin(); it!=patches.end(); ++it) ipatches.erase(*it);
-//        return ipatches;
-//    }
-    
     static ToneNumberSet InvertToneNumberSet(const ToneNumberSet& tones)
     {
         ToneNumberSet itones;
@@ -355,25 +349,21 @@ namespace
         return os;
     }
 
-//    static bool FindToneNumber(const SyxBuffer& tone, const Tones&srcTones, unsigned char& toneNumber)
-//    {
-//        unsigned char t = 0;
-//        for (Tones::const_iterator it=srcTones.begin(); it!=srcTones.end(); ++it, ++t)
-//        {
-//            if (memcmp(&tone.at(0),&it->at(0),tone.size())==0)
-//            {
-//                toneNumber = t;
-//                return true;
-//            }
-//        }
-//        return false;
-//    }
-    
-    static int Compare(const Tones& srcTones, Tones& dstTones, unsigned char tone)
+    static bool FindMatchingTone(const SyxBuffer& tone, const Tones& otherTones, unsigned char& matchingOtherToneNumber)
     {
-        return memcmp(&srcTones[tone].at(0),&dstTones[tone].at(0),srcTones[tone].size());
+        unsigned char t = 0;
+        for (Tones::const_iterator it=otherTones.begin(); it!=otherTones.end(); ++it, ++t)
+        {
+            if ((memcmp(&tone.at(0),&it->at(0),kOffset_Address)==0)
+				&& (memcmp(&tone.at(0)+kOffset_Address+1,&it->at(0)+kOffset_Address+1,tone.size()-kOffset_Address-1)==0))
+            {
+				matchingOtherToneNumber = t;
+                return true;
+            }
+        }
+        return false;
     }
-
+    
     static void CopyPatchesAndTones(const Swaps& swaps, const bool overwriteUnused, const bool force,
                                     const Patches& srcPatches, const Tones& srcTones,
                                     Patches& dstPatches, Tones& dstTones)
@@ -412,12 +402,28 @@ namespace
                 unsigned char a,b;
                 bool holda,holdb;
                 GetPatchTones(patch,a,b,holda,holdb);
-                // [TODO] copy is required only if the tones are not already in dstTones -- but then the source patch's tones must be renumbered
-                // copy is required only if the tones *actually* differ
-                if (a<50 && Compare(srcTones,dstTones,a)!=0)
-                    implicitlyRequiredTones.insert(a);
-                if (b<50 && Compare(srcTones,dstTones,b)!=0)
-                    implicitlyRequiredTones.insert(b);
+                // copy is required only if the tones are not already in dstTones
+				// -- but then the source patch's tones must be renumbered, so treat this as a swap
+				if (a < 50)
+				{
+					unsigned char dstTone;
+					if (FindMatchingTone(srcTones[a], dstTones, dstTone))
+					{
+						toneSwaps.push_back(AddressPair(a, dstTone));
+					}
+					else
+						implicitlyRequiredTones.insert(a);
+				}
+				if (b < 50)
+				{
+					unsigned char dstTone;
+					if (FindMatchingTone(srcTones[b], dstTones, dstTone))
+					{
+						toneSwaps.push_back(AddressPair(b, dstTone));
+					}
+					else
+						implicitlyRequiredTones.insert(b);
+				}
             }
             std::cerr << "Tones required from source patches: " << implicitlyRequiredTones << std::endl;
 
@@ -515,13 +521,13 @@ namespace
         for (Patches::iterator it=patches.begin(); it!=patches.end(); ++it)
         {
             *(it->begin()+kOffset_MIDIChannel) = (unsigned char)0; // set midi channel to 1
-            *(it->begin()+kOffset_Number) = p++; // important! renumber the output patches
+            *(it->begin()+kOffset_Address) = p++; // important! renumber the output patches
             syx.insert(syx.end(),it->begin(),it->end());
         }
         for (Tones::iterator it=tones.begin(); it!=tones.end(); ++it)
         {
             SyxBuffer tone(it->begin(),it->end());
-            if (tone.size() == 67)
+            if (tone.size() == kToneSize_Short)
             {
                 // convert PGR, APR, IPR tones to BLD
                 tone.insert(tone.begin()+7,0);
@@ -529,7 +535,7 @@ namespace
             }
             tone[2] = 0x37; // BLD
             tone[kOffset_MIDIChannel] = 0; // set midi channel to 1
-            tone[kOffset_Number] = t++; // important! renumber the output patches
+            tone[kOffset_Address] = t++; // important! renumber the output patches
             syx.insert(syx.end(),tone.begin(),tone.end());
         }
         return syx;
