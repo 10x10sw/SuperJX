@@ -7,7 +7,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		8245E0B31E7969240028CBCA /* README.md in Sources */ = {isa = PBXBuildFile; fileRef = 8245E0B21E7969240028CBCA /* README.md */; };
+		823B7BF31F9A910500D8BC23 /* patch.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 823B7BF21F9A910500D8BC23 /* patch.cpp */; };
+		823B7BF51F9A911200D8BC23 /* tone.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 823B7BF41F9A911200D8BC23 /* tone.cpp */; };
 		D29D76681E73696800FCF62E /* main.cpp in Sources */ = {isa = PBXBuildFile; fileRef = D29D76671E73696800FCF62E /* main.cpp */; };
 /* End PBXBuildFile section */
 
@@ -24,6 +25,11 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		823B7BEF1F997A6600D8BC23 /* tone.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = tone.h; sourceTree = "<group>"; };
+		823B7BF01F997AA200D8BC23 /* patch.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = patch.h; sourceTree = "<group>"; };
+		823B7BF11F997E5D00D8BC23 /* sysex.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = sysex.h; sourceTree = "<group>"; };
+		823B7BF21F9A910500D8BC23 /* patch.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = patch.cpp; sourceTree = "<group>"; };
+		823B7BF41F9A911200D8BC23 /* tone.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = tone.cpp; sourceTree = "<group>"; };
 		8245E0B21E7969240028CBCA /* README.md */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = net.daringfireball.markdown; path = README.md; sourceTree = "<group>"; };
 		D21E181A1E71DB8C0080DA9E /* superjxsyxtool */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = superjxsyxtool; sourceTree = BUILT_PRODUCTS_DIR; };
 		D29D76671E73696800FCF62E /* main.cpp */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.cpp; path = main.cpp; sourceTree = "<group>"; };
@@ -43,8 +49,13 @@
 		D21E18111E71DB8C0080DA9E = {
 			isa = PBXGroup;
 			children = (
-				8245E0B21E7969240028CBCA /* README.md */,
 				D29D76671E73696800FCF62E /* main.cpp */,
+				823B7BF11F997E5D00D8BC23 /* sysex.h */,
+				823B7BF21F9A910500D8BC23 /* patch.cpp */,
+				823B7BF01F997AA200D8BC23 /* patch.h */,
+				823B7BF41F9A911200D8BC23 /* tone.cpp */,
+				823B7BEF1F997A6600D8BC23 /* tone.h */,
+				8245E0B21E7969240028CBCA /* README.md */,
 				D21E181B1E71DB8C0080DA9E /* Products */,
 			);
 			sourceTree = "<group>";
@@ -83,7 +94,7 @@
 		D21E18121E71DB8C0080DA9E /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
-				LastUpgradeCheck = 0820;
+				LastUpgradeCheck = 0900;
 				ORGANIZATIONNAME = "Ten by Ten";
 				TargetAttributes = {
 					D21E18191E71DB8C0080DA9E = {
@@ -113,8 +124,9 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				8245E0B31E7969240028CBCA /* README.md in Sources */,
+				823B7BF31F9A910500D8BC23 /* patch.cpp in Sources */,
 				D29D76681E73696800FCF62E /* main.cpp in Sources */,
+				823B7BF51F9A911200D8BC23 /* tone.cpp in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -129,14 +141,20 @@
 				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
 				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
 				CLANG_WARN_CONSTANT_CONVERSION = YES;
 				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
 				CLANG_WARN_EMPTY_BODY = YES;
 				CLANG_WARN_ENUM_CONVERSION = YES;
 				CLANG_WARN_INFINITE_RECURSION = YES;
 				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
@@ -174,14 +192,20 @@
 				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
 				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
 				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
 				CLANG_WARN_CONSTANT_CONVERSION = YES;
 				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
 				CLANG_WARN_EMPTY_BODY = YES;
 				CLANG_WARN_ENUM_CONVERSION = YES;
 				CLANG_WARN_INFINITE_RECURSION = YES;
 				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
 				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
 				CLANG_WARN_SUSPICIOUS_MOVE = YES;
 				CLANG_WARN_UNREACHABLE_CODE = YES;
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;

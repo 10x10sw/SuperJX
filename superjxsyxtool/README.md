@@ -9,7 +9,10 @@ or simply prints the contents of the file.
 
 ## Why This Program
 I wanted to rearrange patches in my MKS-70 and select patches and tones from various bulk dump
-files. I wanted a automatic tone rearrangement when moving patches around. 
+files. I especially wanted automatic tone rearrangement when moving patches around,
+with features such as automatic detection and elimination of duplicate tones, and easy relinking of
+patches to tones when moving patches from one bulk dump file to another.
+(Who really wants to figure out how to arrange both patches and tones?)
 I had a hard time finding software that would do what I wanted. Maybe SoundDiver used
 to do this, but I can't get it to run any more.
 
@@ -21,7 +24,9 @@ To build this program, you need a C++ compiler. Projects are supplied for Xcode 
 ## Help
 Here is the output of `superjxsyxtool -h` :
 ```
-usage: superjxsyxtool [-h] [-p] [-u] [-U] [-f] [-x patch1,patch2,tone1,tone2,...]
+usage: superjxsyxtool [-h] [-p] [-u] [-U] [-f]
+                      [-d [patch1,patch2,tone1,tone2,...]]
+                      [-x patch1,patch2,tone1,tone2,...]
                       [-s COPYFROMFILE [-c src1,dst1,src2,dst2,...]] [-o OUTPUTFILE] INPUTFILE
 
 Manipulates Roland Super JX (MKS-70 / JX-10) system exclusive (syx) files.
@@ -31,6 +36,8 @@ positional arguments:
 
 optional arguments:
   -h                                  show this help message and exit
+  -d [patch1,patch2,tone1,tone2,...]  print parameter details of the specified patches and tones,
+                                      or details of all patches and tones of none are specified
   -o OUTPUTFILE                       write changed syx to OUTPUTFILE
   -p                                  print all patches and tones
   -u                                  print tones used by patches

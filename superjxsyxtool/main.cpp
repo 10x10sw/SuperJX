@@ -6,6 +6,10 @@
 //  Copyright © 2017 Ten by Ten. All rights reserved.
 //
 
+#include "sysex.h"
+#include "tone.h"
+#include "patch.h"
+
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -15,23 +19,14 @@
 
 namespace
 {
-    
-    static const size_t kHeaderSize = 8;
     static const size_t kOffset_MIDIChannel = 3;
     static const size_t kOffset_Address = 8;
-    static const size_t kPatchOffset_Name = kHeaderSize + 1;
-    static const size_t kPatchOffset_ToneA = kHeaderSize + 55;
-    static const size_t kPatchOffset_ToneB = kHeaderSize + 65;
-	static const size_t kPatchSize = 106;
-	static const size_t kToneSize = 69;
-	static const size_t kToneSize_Short = 67;
-    
-    typedef std::vector<unsigned char> SyxBuffer;
-    typedef std::vector<SyxBuffer> Patches;
-    typedef std::vector<SyxBuffer> Tones;
-    typedef std::set<unsigned char> PatchNumberSet;
-    typedef std::set<unsigned char> ToneNumberSet;
-    typedef std::pair<unsigned char, unsigned char> AddressPair;
+	
+    typedef std::vector<SyxBuffer> SyxPatches;
+    typedef std::vector<SyxBuffer> SyxTones;
+    typedef std::set<uint8_t> PatchNumberSet;
+    typedef std::set<uint8_t> ToneNumberSet;
+    typedef std::pair<uint8_t, uint8_t> AddressPair;
     typedef std::vector<AddressPair> PatchSwaps;
     typedef std::vector<AddressPair> ToneSwaps;
     typedef std::pair<PatchSwaps, ToneSwaps> Swaps;
@@ -68,19 +63,12 @@ namespace
 //        }
 //        std::cerr << std::endl;
 //    }
-    
+	
     static void WriteFile(const char* path, const SyxBuffer& syx)
     {
         std::ofstream file(path, std::ios::out | std::ios::binary);
         if (file.good())
             file.write((const char*)&syx.at(0),syx.size());
-    }
-    
-    static unsigned char CombineBytes(unsigned char top, unsigned char bot)
-    {
-        top = top << 4;
-        if (top > 127) top -= 128;
-        return top | bot;
     }
     
     static bool FindPatch(const SyxBuffer& syx, SyxBuffer::const_iterator& from)
@@ -96,7 +84,7 @@ namespace
                 && (patchStart[1] == 0x41) // Roland
                 && (patchStart[4] == 0x24) // MKS-70 / JX-10
                 && (patchStart[5] == 0x30) // Patch Data
-                && (patchStart[kPatchSize-1] == 0xf7)) // end of patch data (106 bytes in file)
+				&& (patchStart[SuperJXPatch::kPatchSize-1] == 0xf7)) // end of patch data (106 bytes in file)
             {
                 from = patchStart;
                 return true;
@@ -118,7 +106,7 @@ namespace
                 && (it[1] == 0x41) // Roland
                 && (it[4] == 0x24) // MKS-70 / JX-10
                 && (it[5] == 0x20) // Tone Data
-                && ((it[kToneSize-1] == 0xf7) || (it[kToneSize_Short-1] == 0xf7))) // end of tone data
+				&& ((it[SuperJXTone::kToneSize-1] == 0xf7) || (it[SuperJXTone::kToneSize_Short-1] == 0xf7))) // end of tone data
             {
                 from = it;
                 while ((*(++it) != 0xf7) && (it < syx.end())) ;
@@ -132,27 +120,27 @@ namespace
         return 0;
     }
     
-    static Patches ParsePatches(const SyxBuffer& syx)
+    static SyxPatches ParsePatches(const SyxBuffer& syx)
     {
-        Patches patches;
+        SyxPatches patches;
         SyxBuffer::const_iterator it = syx.begin();
         for (int b=0; b<64; ++b)
         {
             if (FindPatch(syx,it))
             {
-                SyxBuffer patch(it,it+kPatchSize);
-                it+=kPatchSize;
+                SyxBuffer patch(it,it+SuperJXPatch::kPatchSize);
+				it+=SuperJXPatch::kPatchSize;
                 patches.push_back(patch);
             }
             else
-                return Patches();
+                return SyxPatches();
         }
         return patches;
     }
     
-    static Tones ParseTones(const SyxBuffer& syx)
+    static SyxTones ParseTones(const SyxBuffer& syx)
     {
-        Tones tones;
+        SyxTones tones;
         size_t toneSize = 0;
         SyxBuffer::const_iterator it = syx.begin();
         do
@@ -167,49 +155,15 @@ namespace
         } while (toneSize!=0 && it<syx.end());
         return tones;
     }
-    
-    static std::string GetPatchName(const SyxBuffer& patch)
-    {
-        std::string name;
-        for (int i=0; i<18; i++)
-        {
-            unsigned char c = CombineBytes(patch[kPatchOffset_Name+i*2], patch[kPatchOffset_Name+1+i*2]);
-            if (c < 10)
-                c += 48;
-            name.push_back(c);
-        }
-        return name;
-    }
-    
-    static void GetPatchTones(const SyxBuffer& patch, unsigned char& a, unsigned char& b, bool& holda, bool& holdb)
-    {
-        a = CombineBytes(patch[kPatchOffset_ToneA],patch[kPatchOffset_ToneA+1]);
-        b = CombineBytes(patch[kPatchOffset_ToneB],patch[kPatchOffset_ToneB+1]);
-        holda = (patch[kPatchOffset_ToneA] & 0x8) == 0x8;
-        holdb = (patch[kPatchOffset_ToneB] & 0x8) == 0x8;
-    }
-    
-    static void SetPatchTones(SyxBuffer& patch, unsigned char a, unsigned char b, bool holda, bool holdb)
-    {
-        unsigned char top = a >> 4;
-        if (holda) top |= 0x8;
-        patch[kPatchOffset_ToneA] = top;
-        patch[kPatchOffset_ToneA+1] = a & 0xf;
-        top = b >> 4;
-        if (holdb) top |= 0x8;
-        patch[kPatchOffset_ToneB] = top;
-        patch[kPatchOffset_ToneB+1] = b & 0xf;
-    }
-    
-    static ToneNumberSet ParseUsedTones(const Patches& banks)
+        
+    static ToneNumberSet ParseUsedTones(const SyxPatches& banks)
     {
         ToneNumberSet tones;
-        for (Patches::const_iterator it=banks.begin(); it!=banks.end(); ++it)
+		for (auto& patch: banks)
         {
-            const SyxBuffer& patch(*it);
-            unsigned char a,b;
+            uint8_t a,b;
             bool holda,holdb;
-            GetPatchTones(patch,a,b,holda,holdb);
+			SuperJXPatch::GetTones(patch,a,b,holda,holdb);
             tones.insert(a);
             tones.insert(b);
         }
@@ -224,25 +178,25 @@ namespace
                 && (str[1] >= '1' && str[1] <= '8'));
     }
     
-    static unsigned char ParsePatchNumber(const std::string& str)
+    static uint8_t ParsePatchNumber(const std::string& str)
     {
         if (IsPatch(str))
         {
-            unsigned char b = str[0] > 'H' ? str[0]-'a' : str[0]-'A';
-            unsigned char p = str[1] - '1';
+            uint8_t b = str[0] > 'H' ? str[0]-'a' : str[0]-'A';
+            uint8_t p = str[1] - '1';
             return b*8+p;
         }
         return 0;
     }
     
-    static unsigned char ParseToneNumber(const std::string& str)
+    static uint8_t ParseToneNumber(const std::string& str)
     {
-        return static_cast<unsigned char>(strtoul(str.c_str(),NULL,10)-1);
+        return static_cast<uint8_t>(strtoul(str.c_str(),NULL,10)-1);
     }
     
     static bool IsUserTone(const std::string& str)
     {
-        unsigned char t = ParseToneNumber(str);
+        uint8_t t = ParseToneNumber(str);
         return t>=0 && t<51;
     }
     
@@ -276,13 +230,13 @@ namespace
         return swaps;
     }
     
-    static void SwapPatchTones(Patches& patches, unsigned char t1, unsigned char t2)
+    static void SwapPatchTones(SyxPatches& patches, uint8_t t1, uint8_t t2)
     {
-        for (Patches::iterator it=patches.begin(); it!=patches.end(); ++it)
+		for (auto& patch: patches)
         {
-            unsigned char a,b;
+            uint8_t a,b;
             bool holda,holdb;
-            GetPatchTones(*it,a,b,holda,holdb);
+			SuperJXPatch::GetTones(patch,a,b,holda,holdb);
             if (a == t1)
                 a = t2;
             else if (a == t2)
@@ -291,29 +245,29 @@ namespace
                 b = t2;
             else if (b == t2)
                 b = t1;
-            SetPatchTones(*it,a,b,holda,holdb);
+			SuperJXPatch::SetTones(patch,a,b,holda,holdb);
         }
     }
     
-    static void SwapPatches(const PatchSwaps& swaps, Patches& patches)
+    static void SwapPatches(const PatchSwaps& swaps, SyxPatches& patches)
     {
         if (!swaps.empty())
         {
             std::cerr << "Swapping patches:";
             for (PatchSwaps::const_iterator it=swaps.begin(); it!=swaps.end(); ++it)
             {
-                unsigned char p1 = it->first;
-                unsigned char p2 = it->second;
-                std::cerr << " " << (char)(65+p1/8) << p1%8+1 << "<=>" << (char)(65+p2/8) << p2%8+1;
-                Patches::iterator it1 = patches.begin()+p1;
-                Patches::iterator it2 = patches.begin()+p2;
+                uint8_t p1 = it->first;
+                uint8_t p2 = it->second;
+                std::cerr << " " << SuperJXPatch::GetPatchAddress(p1) << "<=>" << SuperJXPatch::GetPatchAddress(p2);
+                SyxPatches::iterator it1 = patches.begin()+p1;
+                SyxPatches::iterator it2 = patches.begin()+p2;
                 std::swap(*it1,*it2);
             }
             std::cerr << std::endl;
         }
     }
     
-    static void SwapTones(const ToneSwaps& swaps, Patches& patches, Tones& tones)
+    static void SwapTones(const ToneSwaps& swaps, SyxPatches& patches, SyxTones& tones)
     {
         if (!swaps.empty())
         {
@@ -321,12 +275,12 @@ namespace
             for (ToneSwaps::const_iterator it=swaps.begin(); it!=swaps.end(); ++it)
             {
                 // when swapping tones, make sure the patches are updated too
-                unsigned char t1 = it->first;
-                unsigned char t2 = it->second;
+                uint8_t t1 = it->first;
+                uint8_t t2 = it->second;
                 SwapPatchTones(patches,t1,t2);
                 std::cerr << " " << (int)t1+1 << "<=>" << (int)(t2+1);
-                Patches::iterator it1 = tones.begin()+t1;
-                Patches::iterator it2 = tones.begin()+t2;
+                SyxPatches::iterator it1 = tones.begin()+t1;
+                SyxPatches::iterator it2 = tones.begin()+t2;
                 std::swap(*it1,*it2);
             }
             std::cerr << std::endl;
@@ -344,15 +298,15 @@ namespace
     
     std::ostream & operator<<(std::ostream &os, const ToneNumberSet& tones)
     {
-        for (ToneNumberSet::const_iterator it=tones.begin(); it!=tones.end(); ++it)
-            os << (int)(*it)+1 << " ";
+		for (auto t: tones)
+            os << (int)t+1 << " ";
         return os;
     }
 
-    static bool FindMatchingTone(const SyxBuffer& tone, const Tones& otherTones, unsigned char& matchingOtherToneNumber)
+    static bool FindMatchingTone(const SyxBuffer& tone, const SyxTones& otherTones, uint8_t& matchingOtherToneNumber)
     {
-        unsigned char t = 0;
-        for (Tones::const_iterator it=otherTones.begin(); it!=otherTones.end(); ++it, ++t)
+        uint8_t t = 0;
+        for (SyxTones::const_iterator it=otherTones.begin(); it!=otherTones.end(); ++it, ++t)
         {
             if ((memcmp(&tone.at(0),&it->at(0),kOffset_Address)==0)
 				&& (memcmp(&tone.at(0)+kOffset_Address+1,&it->at(0)+kOffset_Address+1,tone.size()-kOffset_Address-1)==0))
@@ -365,8 +319,8 @@ namespace
     }
     
     static void CopyPatchesAndTones(const Swaps& swaps, const bool overwriteUnused, const bool force,
-                                    const Patches& srcPatches, const Tones& srcTones,
-                                    Patches& dstPatches, Tones& dstTones)
+                                    const SyxPatches& srcPatches, const SyxTones& srcTones,
+                                    SyxPatches& dstPatches, SyxTones& dstTones)
     {
         const PatchSwaps& patchSwaps = swaps.first;
         ToneSwaps toneSwaps = swaps.second; // this is a copy; it will be changed below
@@ -377,7 +331,7 @@ namespace
             ToneNumberSet unusedTones = InvertToneNumberSet(ToneNumberSet());
             if (overwriteUnused)
             {
-                Patches leftoverPatches;
+                SyxPatches leftoverPatches;
                 PatchNumberSet leftoverPatchNumbers;
                 for (int i=0; i<64; ++i) leftoverPatchNumbers.insert(i);
                 for (PatchSwaps::const_iterator it = patchSwaps.begin(); it!=patchSwaps.end(); ++it)
@@ -399,14 +353,14 @@ namespace
             for (PatchSwaps::const_iterator it = patchSwaps.begin(); it!=patchSwaps.end(); ++it)
             {
                 const SyxBuffer& patch=srcPatches[it->first];
-                unsigned char a,b;
+                uint8_t a,b;
                 bool holda,holdb;
-                GetPatchTones(patch,a,b,holda,holdb);
+                SuperJXPatch::GetTones(patch,a,b,holda,holdb);
                 // copy is required only if the tones are not already in dstTones
 				// -- but then the source patch's tones must be renumbered, so treat this as a swap
 				if (a < 50)
 				{
-					unsigned char dstTone;
+					uint8_t dstTone;
 					if (FindMatchingTone(srcTones[a], dstTones, dstTone))
 					{
 						toneSwaps.push_back(AddressPair(a, dstTone));
@@ -416,7 +370,7 @@ namespace
 				}
 				if (b < 50)
 				{
-					unsigned char dstTone;
+					uint8_t dstTone;
 					if (FindMatchingTone(srcTones[b], dstTones, dstTone))
 					{
 						toneSwaps.push_back(AddressPair(b, dstTone));
@@ -462,16 +416,16 @@ namespace
                 std::cerr << "Copying patches:";
                 for (PatchSwaps::const_iterator it=patchSwaps.begin(); it!=patchSwaps.end(); ++it)
                 {
-                    unsigned char p1 = it->first;
-                    unsigned char p2 = it->second;
-                    std::cerr << " " << (char)(65+p1/8) << p1%8+1 << "->" << (char)(65+p2/8) << p2%8+1;
-                    Patches::const_iterator it1 = srcPatches.begin()+p1;
-                    Patches::iterator it2 = dstPatches.begin()+p2;
+                    uint8_t p1 = it->first;
+                    uint8_t p2 = it->second;
+                    std::cerr << " " << SuperJXPatch::GetPatchAddress(p1) << "->" << SuperJXPatch::GetPatchAddress(p2);
+                    SyxPatches::const_iterator it1 = srcPatches.begin()+p1;
+                    SyxPatches::iterator it2 = dstPatches.begin()+p2;
                     *it2 = *it1;
                     // now fix up tones
-                    unsigned char a,b;
+                    uint8_t a,b;
                     bool holda,holdb;
-                    GetPatchTones(*it2,a,b,holda,holdb);
+                    SuperJXPatch::GetTones(*it2,a,b,holda,holdb);
                     if (a<50)
                     {
                         for (ToneSwaps::const_iterator it=toneSwaps.begin(); it!=toneSwaps.end(); ++it)
@@ -490,7 +444,7 @@ namespace
                                 break;
                             }
                     }
-                    SetPatchTones(*it2,a,b,holda,holdb);
+                    SuperJXPatch::SetTones(*it2,a,b,holda,holdb);
                 }
                 std::cerr << std::endl;
             }
@@ -499,13 +453,13 @@ namespace
                 std::cerr << "Copying tones:";
                 for (ToneSwaps::const_iterator it=toneSwaps.begin(); it!=toneSwaps.end(); ++it)
                 {
-                    unsigned char t1 = it->first;
-                    unsigned char t2 = it->second;
+                    uint8_t t1 = it->first;
+                    uint8_t t2 = it->second;
                     if (t1<50 && t2<50)
                     {
                         std::cerr << " " << (int)t1+1 << "->" << (int)(t2+1);
-                        Tones::const_iterator it1 = srcTones.begin()+t1;
-                        Tones::iterator it2 = dstTones.begin()+t2;
+                        SyxTones::const_iterator it1 = srcTones.begin()+t1;
+                        SyxTones::iterator it2 = dstTones.begin()+t2;
                         *it2 = *it1;
                     }
                 }
@@ -514,20 +468,20 @@ namespace
         }
     }
     
-    static SyxBuffer WriteSyx(Patches& patches, Tones& tones)
+    static SyxBuffer WriteSyx(SyxPatches& patches, SyxTones& tones)
     {
-        unsigned char p=0, t=0;
+        uint8_t p=0, t=0;
         SyxBuffer syx;
-        for (Patches::iterator it=patches.begin(); it!=patches.end(); ++it)
+        for (SyxPatches::iterator it=patches.begin(); it!=patches.end(); ++it)
         {
-            *(it->begin()+kOffset_MIDIChannel) = (unsigned char)0; // set midi channel to 1
+            *(it->begin()+kOffset_MIDIChannel) = (uint8_t)0; // set midi channel to 1
             *(it->begin()+kOffset_Address) = p++; // important! renumber the output patches
             syx.insert(syx.end(),it->begin(),it->end());
         }
-        for (Tones::iterator it=tones.begin(); it!=tones.end(); ++it)
+        for (SyxTones::iterator it=tones.begin(); it!=tones.end(); ++it)
         {
             SyxBuffer tone(it->begin(),it->end());
-            if (tone.size() == kToneSize_Short)
+			if (tone.size() == SuperJXTone::kToneSize_Short)
             {
                 // convert PGR, APR, IPR tones to BLD
                 tone.insert(tone.begin()+7,0);
@@ -541,31 +495,23 @@ namespace
         return syx;
     }
     
-    static void FixNameNumbers(std::string& name)
+    static void PrintPatchName(const SyxBuffer& patch, uint8_t p)
     {
-        for (std::string::iterator it = name.begin(); it != name.end(); ++it)
-            if (*it < 10)
-                *it += 48;
-    }
-    
-    static void PrintPatchName(const SyxBuffer& patch, unsigned char p)
-    {
-        std::cerr << " " << (char)(65+p/8) << p%8+1 << "  ";
-        std::string patchName = GetPatchName(patch);
-        unsigned char a,b;
+        std::cerr << " " << SuperJXPatch::GetPatchAddress(p) << "  ";
+		std::string patchName = SuperJXPatch::GetName(patch);
+        uint8_t a,b;
         bool holda,holdb;
-        GetPatchTones(patch,a,b,holda,holdb);
+        SuperJXPatch::GetTones(patch,a,b,holda,holdb);
         std::cerr << patchName << "    " << std::setfill(' ') << std::setw(3) << (int)b+1 << "  " << std::setw(3) << (int)a+1;
     }
 
-    static void PrintToneName(const SyxBuffer& tone, unsigned char t)
+    static void PrintToneName(const SyxBuffer& tone, uint8_t t)
     {
-        std::string toneName(tone.begin()+9,tone.begin()+19);
-        FixNameNumbers(toneName);
+		std::string toneName = SuperJXTone::GetName(tone);
         std::cerr << std::setfill('0') << std::setw(2) << t+1 << "  " << toneName;
     }
     
-    static void PrintPatchesAndTones(const Patches& patches, const Tones& tones, const bool printPresets)
+    static void PrintPatchesAndTones(const SyxPatches& patches, const SyxTones& tones, const bool printPresets)
     {
         std::cerr << "-----------------------------------" << std::endl;
         std::cerr << "PATCH      NAME              B    A" << std::endl;
@@ -615,18 +561,18 @@ namespace
     static void PrintUsedTones(const ToneNumberSet& tones, const bool includePresets)
     {
         std::cerr << "User tones in use: ";
-        for (ToneNumberSet::const_iterator it=tones.begin(); it!=tones.end(); ++it)
+		for (auto t: tones)
         {
-            int tone = *it+1;
+            int tone = t+1;
             if (tone<=50)
                 std::cerr << tone << " ";
         }
         if (includePresets)
         {
             std::cerr << std::endl << "Factory preset tones in use: ";
-            for (ToneNumberSet::const_iterator it=tones.begin(); it!=tones.end(); ++it)
+			for (auto t: tones)
             {
-                int tone = *it+1;
+                int tone = t+1;
                 if (tone>50)
                     std::cerr << tone << " ";
             }
@@ -638,35 +584,91 @@ namespace
     {
         std::cerr << "User tones not in use: ";
         ToneNumberSet unusedTones = InvertToneNumberSet(usedTones);
-        for (ToneNumberSet::const_iterator it=unusedTones.begin(); it!=unusedTones.end(); ++it)
+		for (auto t: unusedTones)
         {
-            int tone = *it+1;
+            int tone = t+1;
             if (tone<=50)
                 std::cerr << tone << " ";
         }
         if (includePresets)
         {
             std::cerr << std::endl << "Factory preset tones not in use: ";
-            for (ToneNumberSet::const_iterator it=unusedTones.begin(); it!=unusedTones.end(); ++it)
+			for (auto t: unusedTones)
             {
-                int tone = *it+1;
+                int tone = t+1;
                 if (tone>50)
                     std::cerr << tone << " ";
             }
         }
         std::cerr << std::endl;
     }
-    
+	
+	static void ParseDetails(const char* str, PatchNumberSet& patches, ToneNumberSet& tones)
+	{
+		std::stringstream ss;
+		ss.str(str);
+		std::string n1;
+		while (std::getline(ss, n1, ','))
+		{
+			if (IsPatch(n1))
+			{
+				patches.insert(ParsePatchNumber(n1));
+			}
+			else if (IsUserTone(n1))
+			{
+				tones.insert(ParseToneNumber(n1));
+			}
+		}
+	}
+	
+	static void PrintDetails(const SyxPatches& patches, const SyxTones& tones, const PatchNumberSet& whichPatches, const ToneNumberSet& whichTones)
+	{
+		bool printAll = whichPatches.empty() && whichTones.empty();
+		std::cerr << std::endl << "----------------" << std::endl;
+		std::cerr << "PARAMETERS" << std::endl;
+		
+		if (printAll)
+		{
+			for (auto& p: patches)
+			{
+				SuperJXPatch patch(p);
+				patch.Print();
+			}
+			for (auto& t: tones)
+			{
+				SuperJXTone tone(t);
+				tone.Print();
+			}
+		}
+		else
+		{
+			for (auto p: whichPatches)
+			{
+				SuperJXPatch patch(patches[p]);
+				patch.Print();
+			}
+			for (auto t: whichTones)
+			{
+				SuperJXTone tone(tones[t]);
+				tone.Print();
+			}
+		}
+	}
+	
 	static void PrintHelp(const char * appName)
 	{
         std::cerr << "\
-usage: superjxsyxtool [-h] [-p] [-u] [-U] [-f] [-x patch1,patch2,tone1,tone2,...]\n\
+usage: superjxsyxtool [-h] [-p] [-u] [-U] [-f]\n\
+                      [-d [patch1,patch2,tone1,tone2,...]]\n\
+                      [-x patch1,patch2,tone1,tone2,...]\n\
                       [-s COPYFROMFILE [-c src1,dst1,src2,dst2,...]] [-o OUTPUTFILE] INPUTFILE\n\n\
 Manipulates Roland Super JX (MKS-70 / JX-10) system exclusive (syx) files.\n\n\
 positional arguments:\n\
   INPUTFILE                           the input syx file\n\n\
 optional arguments (addresses for patches: a1-h8 or A1-H8; user tones: 1-50):\n\
   -h                                  show this help message and exit\n\
+  -d [patch1,tone1,...]               print parameter details of the specified patches and tones,\n\
+                                      or details of all patches and tones of none are specified\n\
   -o OUTPUTFILE                       write changed syx to OUTPUTFILE\n\
   -p                                  print all patches and tones\n\
   -u                                  print tones used by patches\n\
@@ -686,8 +688,7 @@ optional arguments (addresses for patches: a1-h8 or A1-H8; user tones: 1-50):\n\
   -f                                  force copying tones that are in use by another patch,\n\
                                       if there are insufficient unused tones to overwrite\n\
   -F                                  force copying tones that are in use by another patch,\n\
-                                      and do not overwrite any unused tones\n\
-        " << std::endl;
+                                      and do not overwrite any unused tones\n" << std::endl;
 	}
 	
 } // anonymous namespace
@@ -706,14 +707,14 @@ int main(int argc, const char * argv[])
         
         if (!syx.empty())
         {
-            Patches patches = ParsePatches(syx);
-            Tones tones = ParseTones(syx);
+            SyxPatches patches = ParsePatches(syx);
+            SyxTones tones = ParseTones(syx);
             
             Swaps swaps;
 
             Swaps copies;
-            Patches srcPatches;
-            Tones srcTones;
+            SyxPatches srcPatches;
+            SyxTones srcTones;
 
             bool print = false;
             bool printUsed = false;
@@ -722,6 +723,10 @@ int main(int argc, const char * argv[])
             bool forceAddressPair = false;
             bool forceCopy = false;
             bool overwriteUnused = true;
+
+			PatchNumberSet patchDetails;
+			ToneNumberSet toneDetails;
+			bool printDetails = false;
             
             for (size_t a=1; a<argc-1; ++a)
             {
@@ -781,11 +786,18 @@ int main(int argc, const char * argv[])
                     forceAddressPair = (strcmp(argv[a],"-X")==0);
                     ++a;
                 }
+				else if (strcmp(argv[a],"-d")==0)
+				{
+					ParseDetails(argv[a+1],patchDetails,toneDetails);
+					if (!patchDetails.empty() || !toneDetails.empty())
+						++a;
+					printDetails = true;
+				}
             }
             
             SwapPatches(swaps.first,patches);
 
-            Patches noPatches;
+            SyxPatches noPatches;
             SwapTones(swaps.second,forceAddressPair?noPatches:patches,tones);
             
             CopyPatchesAndTones(copies,overwriteUnused,forceCopy,srcPatches,srcTones,patches,tones);
@@ -793,13 +805,14 @@ int main(int argc, const char * argv[])
             syx = WriteSyx(patches,tones);
             
             // if there's nothing else to do then print
-            if (swaps.first.empty() && swaps.second.empty() && copies.first.empty() && copies.second.empty())
+            if (swaps.first.empty() && swaps.second.empty() && copies.first.empty() && copies.second.empty() && patchDetails.empty() && toneDetails.empty())
                 print = true;
             
-            if (print)
+			patches = ParsePatches(syx);
+			tones = ParseTones(syx);
+
+			if (print)
             {
-                patches = ParsePatches(syx);
-                tones = ParseTones(syx);
                 PrintPatchesAndTones(patches,tones,includePresets);
             }
 
@@ -811,7 +824,10 @@ int main(int argc, const char * argv[])
             
             if (!outputFile.empty())
                 WriteFile(outputFile.c_str(),syx);
-        }
+			
+			if (printDetails)
+				PrintDetails(patches,tones,patchDetails,toneDetails);
+		}
         else
         {
             PrintHelp(argv[0]);
