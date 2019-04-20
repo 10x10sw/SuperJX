@@ -7,6 +7,8 @@
 //
 
 #include "tone.h"
+#include <stdint.h>
+#include <stdio.h>
 #include <iomanip>
 #include <iostream>
 

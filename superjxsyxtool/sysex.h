@@ -9,6 +9,7 @@
 #ifndef sysex_h
 #define sysex_h
 
+#include <stdint.h>
 #include <vector>
 
 typedef std::vector<uint8_t> SyxBuffer;

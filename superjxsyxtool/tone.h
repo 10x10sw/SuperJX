@@ -9,6 +9,7 @@
 #ifndef tone_h
 #define tone_h
 
+#include <stdint.h>
 #include <string>
 #include "sysex.h"
 
