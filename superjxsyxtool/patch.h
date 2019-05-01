@@ -9,6 +9,7 @@
 #ifndef patch_h
 #define patch_h
 
+#include <stdint.h>
 #include <string>
 #include "sysex.h"
 
